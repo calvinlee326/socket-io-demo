@@ -36,6 +36,9 @@ async function main() {
   });
 
   io.on('connection', async (socket) => {
+    // notify existing users
+    socket.broadcast.emit('user event', 'A new user has connected');
+
     socket.on('chat message', async (msg, clientOffset, callback) => {
       let result;
       try {
@@ -54,6 +57,10 @@ async function main() {
       io.emit('chat message', msg, result.lastID);
       // acknowledge the event
       callback();
+    });
+
+    socket.on('disconnect', () => {
+      io.emit('user event', 'A user has disconnected');
     });
 
     if (!socket.recovered) {

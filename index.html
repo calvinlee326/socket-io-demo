@@ -59,6 +59,11 @@
         #messages>li:nth-child(odd) {
             background: #efefef;
         }
+        #messages > li.user-event {
+            font-style: italic;
+            color: #888;
+            background: #fff !important;
+        }
     </style>
 </head>
 
@@ -99,6 +104,14 @@
         window.scrollTo(0, document.body.scrollHeight);
         socket.auth.server_offset = serverOffset;
         callback();
+      });
+
+      socket.on('user event', (msg) => {
+        const item = document.createElement('li');
+        item.textContent = msg;
+        item.classList.add('user-event');
+        messages.appendChild(item);
+        window.scrollTo(0, document.body.scrollHeight);
       });
     </script>
 </body>
