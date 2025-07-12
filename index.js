@@ -19,6 +19,7 @@ async function main() {
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         client_offset TEXT UNIQUE,
+        author TEXT,
         content TEXT
     );
   `);
@@ -36,14 +37,23 @@ async function main() {
   });
 
   io.on('connection', async (socket) => {
+    socket.nickname = 'User-' + socket.id.slice(0, 4);
+
     // notify existing users
-    socket.broadcast.emit('user event', 'A new user has connected');
+    socket.broadcast.emit('user event', `${socket.nickname} has connected`);
+
+    socket.on('change nickname', (newNickname) => {
+      const oldNickname = socket.nickname;
+      socket.nickname = newNickname;
+      socket.emit('nickname assigned', newNickname);
+      io.emit('user event', `${oldNickname} is now known as ${newNickname}`);
+    });
 
     socket.on('chat message', async (msg, clientOffset, callback) => {
       let result;
       try {
         // store the message in the database
-        result = await db.run('INSERT INTO messages (content, client_offset) VALUES (?, ?)', msg, clientOffset);
+        result = await db.run('INSERT INTO messages (content, client_offset, author) VALUES (?, ?, ?)', msg, clientOffset, socket.nickname);
       } catch (e) {
         if (e.errno === 19 /* SQLITE_CONSTRAINT */) {
           // the message was already inserted, so we notify the client
@@ -54,28 +64,32 @@ async function main() {
         return;
       }
       // include the offset with the message
-      io.emit('chat message', msg, result.lastID);
+      io.emit('chat message', msg, result.lastID, socket.nickname);
       // acknowledge the event
       callback();
     });
 
     socket.on('disconnect', () => {
-      io.emit('user event', 'A user has disconnected');
+      io.emit('user event', `${socket.nickname} has disconnected`);
     });
 
     if (!socket.recovered) {
       // if the connection state recovery was not successful
       try {
-        await db.each('SELECT id, content FROM messages WHERE id > ?',
+        await db.each('SELECT id, content, author FROM messages WHERE id > ?',
           [socket.handshake.auth.server_offset || 0],
           (_err, row) => {
-            socket.emit('chat message', row.content, row.id);
+            // pass a boolean to indicate if the message is from the current user
+            socket.emit('chat message', row.content, row.id, row.author, row.author === socket.nickname);
           }
         )
       } catch (e) {
         // something went wrong
       }
     }
+
+    // send the nickname to the client
+    socket.emit('nickname assigned', socket.nickname);
   });
 
   const port = process.env.PORT || 3000;

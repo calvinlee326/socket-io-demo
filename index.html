@@ -53,16 +53,46 @@
         }
 
         #messages>li {
-            padding: 0.5rem 1rem;
+            display: flex;
+            padding: 0.2rem 1rem;
         }
-
-        #messages>li:nth-child(odd) {
+        #messages > li.own {
+            justify-content: flex-end;
+        }
+        .message-bubble {
+            padding: 0.5rem 1rem;
+            border-radius: 1rem;
+            max-width: 70%;
+        }
+        #messages > li:not(.own) .message-bubble {
             background: #efefef;
+        }
+        #messages > li.own .message-bubble {
+            background: #dcf8c6;
+        }
+        .message-bubble > strong {
+            display: block;
+            margin-bottom: 0.2rem;
+        }
+        .message-bubble > strong > .edit-nick {
+            cursor: pointer;
+            font-size: 0.8rem;
+            margin-left: 0.5rem;
+            display: none;
+        }
+        #messages > li.own:hover .message-bubble > strong > .edit-nick {
+            display: inline;
+        }
+        #messages > li.own .message-bubble > strong > input {
+            border: 1px solid #ccc;
+            padding: 0.2rem;
+            font-family: inherit;
+            font-weight: bold;
         }
         #messages > li.user-event {
             font-style: italic;
             color: #888;
-            background: #fff !important;
+            justify-content: center;
         }
     </style>
 </head>
@@ -81,6 +111,7 @@
           server_offset: 0
         }
       });
+      socket.nickname = '';
 
       const form = document.getElementById('form');
       const input = document.getElementById('input');
@@ -97,13 +128,74 @@
         }
       });
 
-      socket.on('chat message', (msg, serverOffset, callback) => {
+      socket.on('nickname assigned', (nickname) => {
+        const oldNickname = socket.nickname;
+        socket.nickname = nickname;
+
+        if (oldNickname && oldNickname !== nickname) {
+          const messagesFromUser = document.querySelectorAll(`#messages > li[data-author="${oldNickname}"]`);
+          messagesFromUser.forEach(item => {
+            const strong = item.querySelector('strong');
+            if (strong) {
+              const editIcon = strong.querySelector('.edit-nick');
+              strong.textContent = nickname;
+              if (editIcon) {
+                strong.appendChild(editIcon);
+              }
+            }
+            item.dataset.author = nickname;
+          });
+        }
+      });
+
+      socket.on('chat message', (msg, serverOffset, author, isOwn) => {
         const item = document.createElement('li');
-        item.textContent = msg;
+        item.dataset.author = author;
+        const bubble = document.createElement('div');
+        bubble.classList.add('message-bubble');
+        const strong = document.createElement('strong');
+        strong.textContent = author;
+
+        // use the isOwn flag from server for historical messages,
+        // otherwise compare nicknames for live messages.
+        const isMyMessage = isOwn === true || author === socket.nickname;
+
+        if (isMyMessage) {
+          item.classList.add('own');
+          const editSpan = document.createElement('span');
+          editSpan.textContent = ' ✏️';
+          editSpan.classList.add('edit-nick');
+          editSpan.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = socket.nickname;
+            strong.innerHTML = '';
+            strong.appendChild(input);
+            input.focus();
+            input.addEventListener('keypress', (e) => {
+              if (e.key === 'Enter') {
+                const newNickname = input.value.trim();
+                if (newNickname) {
+                  socket.emit('change nickname', newNickname);
+                }
+                strong.innerHTML = newNickname;
+                strong.appendChild(editSpan);
+              }
+            });
+            input.addEventListener('blur', () => {
+              strong.innerHTML = socket.nickname;
+              strong.appendChild(editSpan);
+            });
+          });
+          strong.appendChild(editSpan);
+        }
+
+        bubble.appendChild(strong);
+        bubble.append(msg);
+        item.appendChild(bubble);
         messages.appendChild(item);
         window.scrollTo(0, document.body.scrollHeight);
         socket.auth.server_offset = serverOffset;
-        callback();
       });
 
       socket.on('user event', (msg) => {
