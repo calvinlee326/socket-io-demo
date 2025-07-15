@@ -72,12 +72,12 @@ This project is configured to run on multiple ports to simulate a multi-server e
 
 1.  **Start the first server instance (on the default port 3000):**
     ```bash
-    npm start
+    node index.js
     ```
 
 2.  **Open a new terminal window and start a second instance on a different port (e.g., 3001):**
     ```bash
-    PORT=3001 npm start
+    PORT=3001 node index.js
     ```
     *(Note: On Windows, the command might be `set PORT=3001 && npm start`)*
 
